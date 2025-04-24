@@ -2,6 +2,9 @@ import 'dart:io';
 import 'package:blue_detector/services/backend_api.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+import 'package:blue_detector/services/imageprovider.dart'
+    as app_image_provider;
 
 class HomePage extends StatelessWidget {
   HomePage({super.key});
@@ -100,12 +103,10 @@ class HomePage extends StatelessWidget {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
       File imageFile = File(image.path);
-      Navigator.pushNamed(
-        context,
-        'imageviewer',
-        arguments: imageFile,
-      );
-      // await _processImage(context, File(image.path));
+      // final imageProvider =
+      //     Provider.of<app_image_provider.ImageProvider>(context, listen: false);
+      // await imageProvider.processImage(File(image.path));
+      Navigator.pushNamed(context, 'imageviewer', arguments: imageFile);
     }
   }
 
@@ -113,14 +114,39 @@ class HomePage extends StatelessWidget {
     final XFile? image = await _picker.pickImage(source: ImageSource.camera);
     if (image != null) {
       File imageFile = File(image.path);
-      Navigator.pushNamed(
-        context,
-        'imageviewer',
-        arguments: imageFile,
-      );
-      // await _processImage(context, File(image.path));
+      // final imageProvider =
+      //     Provider.of<app_image_provider.ImageProvider>(context, listen: false);
+      // await imageProvider.processImage(File(image.path));
+      Navigator.pushNamed(context, 'imageviewer', arguments: imageFile);
     }
   }
+}
+
+  // Future<void> pickImageFromGallery(BuildContext context) async {
+  //   final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+  //   if (image != null) {
+  //     File imageFile = File(image.path);
+  //     Navigator.pushNamed(
+  //       context,
+  //       'imageviewer',
+  //       arguments: imageFile,
+  //     );
+  //     // await _processImage(context, File(image.path));
+  //   }
+  // }
+
+  // Future<void> pickImageFromCamera(BuildContext context) async {
+  //   final XFile? image = await _picker.pickImage(source: ImageSource.camera);
+  //   if (image != null) {
+  //     File imageFile = File(image.path);
+  //     Navigator.pushNamed(
+  //       context,
+  //       'imageviewer',
+  //       arguments: imageFile,
+  //     );
+  //     // await _processImage(context, File(image.path));
+  //   }
+  // }
 
 //   Future<void> _processImage(BuildContext context, File imageFile) async {
 //     showDialog(
@@ -164,4 +190,4 @@ class HomePage extends StatelessWidget {
 //       );
 //     }
 //   }
-}
+

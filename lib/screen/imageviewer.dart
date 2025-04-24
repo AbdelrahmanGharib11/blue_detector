@@ -1,5 +1,9 @@
 import 'dart:io';
+import 'package:blue_detector/widgets/loading_indicator.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:blue_detector/services/imageprovider.dart'
+    as app_image_provider;
 
 class ImageViewer extends StatelessWidget {
   const ImageViewer({super.key});
@@ -8,6 +12,8 @@ class ImageViewer extends StatelessWidget {
   Widget build(BuildContext context) {
     var screenHeight = MediaQuery.sizeOf(context).height;
     final imagefile = ModalRoute.of(context)!.settings.arguments as File;
+    final imageProvider =
+        Provider.of<app_image_provider.ImageProvider>(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -54,24 +60,25 @@ class ImageViewer extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Container(
-                  height: screenHeight * 0.4,
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Image.file(
-                    imagefile,
-                    fit: BoxFit.cover,
-                  ),
-                ),
+                    height: screenHeight * 0.4,
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Image.file(
+                      imagefile,
+                      fit: BoxFit.cover,
+                    )),
                 SizedBox(height: screenHeight * 0.15),
                 InkWell(
-                  onTap: () {
-                    Navigator.pushNamed(
-                      context,
-                      'resultscreen',
-                      arguments: imagefile,
-                    );
+                  onTap: () async {
+                    final imageProvider =
+                        Provider.of<app_image_provider.ImageProvider>(context,
+                            listen: false);
+                    await imageProvider.processImage(imagefile);
+                    if (imageProvider.processedImage != null) {
+                      Navigator.pushNamed(context, 'resultscreen');
+                    }
                   },
                   child: Container(
                     width: double.infinity,
@@ -87,17 +94,37 @@ class ImageViewer extends StatelessWidget {
                         end: Alignment.bottomCenter,
                       ),
                     ),
-                    child: const Center(
-                      child: Text(
-                        'View Detection Results',
-                        style: TextStyle(
-                          color: Color.fromARGB(255, 7, 61, 123),
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+                    child: imageProvider.isProcessing
+                        ? const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Loading',
+                                style: TextStyle(
+                                  color: Color.fromARGB(255, 7, 61, 123),
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              SizedBox(width: 10),
+                              ThreeDotLoading(
+                                color: Color.fromARGB(255, 7, 61, 123),
+                                size: 24,
+                              ),
+                            ],
+                          )
+                        : const Center(
+                            child: Text(
+                              'View Detection Results',
+                              style: TextStyle(
+                                color: Color.fromARGB(255, 7, 61, 123),
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
                   ),
                 )
               ],

@@ -1,5 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:blue_detector/services/imageprovider.dart'
+    as app_image_provider;
 
 class ResultScreen extends StatelessWidget {
   const ResultScreen({super.key});
@@ -7,8 +10,9 @@ class ResultScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var screenHeight = MediaQuery.sizeOf(context).height;
-    final File imageFile = ModalRoute.of(context)!.settings.arguments as File;
-
+    // final File imageFile = ModalRoute.of(context)!.settings.arguments as File;
+    final imageProvider =
+        Provider.of<app_image_provider.ImageProvider>(context);
     return Scaffold(
       appBar: AppBar(
         elevation: 0,
@@ -71,10 +75,13 @@ class ResultScreen extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Image.file(
-                    imageFile,
-                    fit: BoxFit.cover,
-                  ),
+                  child: imageProvider.processedImage != null
+                      ? Image.file(
+                          imageProvider.processedImage!,
+                          fit: BoxFit.cover,
+                        )
+                      : const Center(
+                          child: Text('No processed image available')),
                 ),
                 SizedBox(height: screenHeight * 0.1),
                 Text(

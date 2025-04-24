@@ -3,8 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 
 class BackendApi {
-  static const String _baseUrl =
-      'http://192.168.1.19:5000'; // Replace with your server IP
+  static const String _baseUrl = 'http://192.168.1.19:5000';
   final Dio _dio = Dio();
 
   Future<File?> uploadImage(File imageFile) async {
