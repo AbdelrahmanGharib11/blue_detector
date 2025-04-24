@@ -103,9 +103,6 @@ class HomePage extends StatelessWidget {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
       File imageFile = File(image.path);
-      // final imageProvider =
-      //     Provider.of<app_image_provider.ImageProvider>(context, listen: false);
-      // await imageProvider.processImage(File(image.path));
       Navigator.pushNamed(context, 'imageviewer', arguments: imageFile);
     }
   }
@@ -114,9 +111,6 @@ class HomePage extends StatelessWidget {
     final XFile? image = await _picker.pickImage(source: ImageSource.camera);
     if (image != null) {
       File imageFile = File(image.path);
-      // final imageProvider =
-      //     Provider.of<app_image_provider.ImageProvider>(context, listen: false);
-      // await imageProvider.processImage(File(image.path));
       Navigator.pushNamed(context, 'imageviewer', arguments: imageFile);
     }
   }
