@@ -1,115 +1,64 @@
-function classify_image_simple(imagePath)    % اقرأ الصورة
+function classify_image_simple(imagePath)
+    % Read the image
     img = imread(imagePath);
-    gray = rgb2gray_if_needed(img);
+    
+    % Process the image with manual skin detection
+    result = detectFaceManual(img);
+    
+    % Save the output using the same pattern as your backend expects
+    save_output_image(imagePath, result);
+    
+    % Display detection result in console
+    disp('✅ Manual Face Detection Completed');
+end
 
-    % اعادة تحجيم
-    gray = imresize(gray, [300 300]);
-    img = imresize(img, [300 300]);
+function result = detectFaceManual(inputImg)
+    %@Input -> Takes input an RGB image
+    %@returns -> A processed image with extracted features present
+    
+    % Checks if the image is not a three-channel color image
+    if size(inputImg, 3) ~= 3
+        result = inputImg;
+        return;
+    end
 
-    % -------- FACE DETECTION --------
-    faceDetector = vision.CascadeObjectDetector();
-    faceBox = step(faceDetector, img);
+    % Convert to YCbCr
+    ycbcr = rgb2ycbcr(inputImg);
+    cb = ycbcr(:, :, 2);
+    cr = ycbcr(:, :, 3);
+   
+    % Choose a threshold for skin color
+    skinMask = (cb >= 77 & cb <= 127) & (cr >= 133 & cr <= 173);
 
-    if ~isempty(faceBox)
-        disp('✅ Detected: FACE');
-        img = draw_boxes(img, faceBox, 'Face');
-
-        % Eye detection
-        eyeDetector = vision.CascadeObjectDetector('EyePairBig');
-        eyeBox = step(eyeDetector, img);
-        if ~isempty(eyeBox)
-            eyeColor = estimateColor(img, eyeBox(1,:));
-            fprintf('👁️ Eye Color: %s\n', eyeColor);
-            img = draw_boxes(img, eyeBox, ['Eyes: ', eyeColor]);
-        end
-
-        % Hair detection (فوق الوجه)
-        hairBox = faceBox(1,:);
-        hairBox(2) = max(1, hairBox(2) - round(hairBox(4) * 0.6));
-        hairBox(4) = round(hairBox(4) * 0.5);
-        hairColor = estimateColor(img, hairBox);
-        fprintf('💇 Hair Color: %s\n', hairColor);
-        img = draw_boxes(img, hairBox, ['Hair: ', hairColor]);
+    % Filtering the mask using median filter
+    skinMask = medfilt2(skinMask, [5 5]);
+    % Filling binary holes for smoothness 
+    skinMask = imfill(skinMask, 'holes');
+    % Filter blobs that are less than 500 pixels in area
+    skinMask = bwareaopen(skinMask, 500);
+    
+    % Find regions and draw bounding boxes
+    stats = regionprops(skinMask, 'BoundingBox');
+    result = inputImg;
+    
+    % Loop through all detected regions
+    for i = 1:length(stats)
+        box = stats(i).BoundingBox;
+        ratio = box(3)/box(4);
         
-        % حفظ الصورة بعد الكشف
-        save_output_image(imagePath, img);
-        return;
-    end
-
-    % -------- HAND DETECTION --------
-    %handDetector = vision.CascadeObjectDetector('Hand');
-    %handBox = step(handDetector, img);
-    %if ~isempty(handBox)
-        %disp('🖐️ Detected: HAND');
-        %img = draw_boxes(img, handBox, 'Hand');
-       % save_output_image(imagePath, img);
-        %return;
-    %end
-
-    % -------- FINGERPRINT DETECTION --------
-    edges = edge(gray, 'Canny');
-    edgeDensity = sum(edges(:)) / numel(edges);
-
-    if edgeDensity > 0.15
-        disp('✅ Detected: FINGERPRINT');
-        img = insertText(img, [10 10], 'Fingerprint Detected', 'FontSize', 18, 'BoxColor', 'green');
-        save_output_image(imagePath, img);
-        return;
-    end
-
-    % -------- OTHER OBJECT --------
-    disp('ℹ️ Detected: OTHER OBJECT');
-    img = insertText(img, [10 10], 'Other Object Detected', 'FontSize', 18, 'BoxColor', 'yellow');
-    save_output_image(imagePath, img);
-
-
-    % ====== HELPERS ======
-
-function gray = rgb2gray_if_needed(img)
-    if size(img,3) == 3
-        gray = rgb2gray(img);
-    else
-        gray = img;
+        % Face detection criteria
+        if box(3) > 60 && box(4) > 60 && ratio > 0.6 && ratio < 1.8
+            % Draw face bounding box
+            result = insertShape(result, 'Rectangle', box, ...
+                'Color', 'green', 'LineWidth', 3);
+            
+            % Add label
+            result = insertText(result, [box(1), box(2)-25], 'Face', ...
+                'FontSize', 14, 'BoxColor', 'green');
+        end
     end
 end
 
-function imgOut = draw_boxes(img, boxes, label)
-    imgOut = img;
-    for i = 1:size(boxes,1)
-        imgOut = insertShape(imgOut, 'Rectangle', boxes(i,:), 'Color', 'green', 'LineWidth', 3);
-        imgOut = insertText(imgOut, boxes(i,1:2), label, 'FontSize', 16, 'BoxColor', 'green');
-    end
-end
-
-function colorName = estimateColor(img, box)
-    region = imcrop(img, box);
-    if isempty(region), colorName = 'Unknown'; return; end
-    avgColor = mean(reshape(double(region), [], 3), 1);
-    r = avgColor(1); g = avgColor(2); b = avgColor(3);
-    if r > 150 && g < 80 && b < 80
-        colorName = 'Red';
-    elseif r < 80 && g > 150 && b < 80
-        colorName = 'Green';
-    elseif r < 80 && g < 80 && b > 150
-        colorName = 'Blue';
-    elseif all(avgColor > 180)
-        colorName = 'White/Gray';
-    elseif all(avgColor < 70)
-        colorName = 'Black/Dark';
-    elseif r > g && r > b
-        colorName = 'Brown/Red';
-    elseif g > r && g > b
-        colorName = 'Greenish';
-    elseif b > r && b > g
-        colorName = 'Bluish';
-    else
-        colorName = 'Mixed';
-    end
-end
-
-if ~exist('imagePath', 'var') || isempty(imagePath)
-    imagePath = 'detected_output.png'; % Provide default
-end
 function save_output_image(originalPath, img)
     % ROBUST IMAGE SAVING WITH PATH VALIDATION
     
@@ -186,11 +135,4 @@ function save_output_image(originalPath, img)
             error('Failed to save image: %s\nOriginal error: %s', fallbackPath, ME.message);
         end
     end
-end
-
-
-
-
-
-
 end
