@@ -33,14 +33,11 @@ class BackendApi {
         await file.writeAsBytes(response.data);
         return file;
       } else {
-       
         return null;
       }
     } catch (e) {
       print('Error uploading image: $e');
-      if (e is DioException) {
-       
-      }
+      if (e is DioException) {}
       return null;
     }
   }

@@ -70,7 +70,7 @@ class ResultScreen extends StatelessWidget {
                 SizedBox(height: screenHeight * 0.02),
                 Container(
                   width: double.infinity,
-                  height: screenHeight * 0.4,
+                  height: screenHeight * 0.5,
                   clipBehavior: Clip.hardEdge,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
@@ -78,12 +78,12 @@ class ResultScreen extends StatelessWidget {
                   child: imageProvider.processedImage != null
                       ? Image.file(
                           imageProvider.processedImage!,
-                          fit: BoxFit.cover,
+                          fit: BoxFit.fill,
                         )
                       : const Center(
                           child: Text('No processed image available')),
                 ),
-                SizedBox(height: screenHeight * 0.1),
+                SizedBox(height: screenHeight * 0.05),
                 Text(
                   'Detected: Face',
                   style: TextStyle(

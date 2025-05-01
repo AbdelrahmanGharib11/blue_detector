@@ -23,9 +23,7 @@ class ImageProvider with ChangeNotifier {
     try {
       _processedImage = await _backendApi.uploadImage(imageFile);
       if (_processedImage != null) {
-        
-        _detectionResults =
-            "Face detected"; 
+        _detectionResults = "Face detected";
       } else {
         _detectionResults = "Detection failed";
       }
