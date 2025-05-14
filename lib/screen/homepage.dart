@@ -1,10 +1,6 @@
 import 'dart:io';
-import 'package:blue_detector/services/backend_api.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart';
-import 'package:blue_detector/services/imageprovider.dart'
-    as app_image_provider;
 
 class HomePage extends StatelessWidget {
   HomePage({super.key});
@@ -35,7 +31,7 @@ class HomePage extends StatelessWidget {
                 'asset/image/model1.png',
                 fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) {
-                  return Image.asset("assets/images/failureloading.png",
+                  return Image.asset("asset/image/failureloading.png",
                       fit: BoxFit.fill,
                       width: double.infinity,
                       height: double.infinity);
@@ -57,38 +53,72 @@ class HomePage extends StatelessWidget {
                     fontWeight: FontWeight.bold),
               ),
               const Spacer(flex: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton(
-                    onPressed: () => pickImageFromGallery(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      iconColor: const Color(0xff0E67D0).withOpacity(0.8),
-                      shape: const CircleBorder(),
-                      padding: const EdgeInsets.all(10),
-                    ),
-                    child: const Icon(
-                      Icons.photo_library_rounded,
-                      size: 40,
-                    ),
-                  ),
-                  const SizedBox(width: 24),
-                  ElevatedButton(
-                    onPressed: () => pickImageFromCamera(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      iconColor: const Color(0xff0E67D0).withOpacity(0.8),
-                      shape: const CircleBorder(),
-                      padding: const EdgeInsets.all(10),
-                    ),
-                    child: const Icon(
-                      Icons.camera_alt,
-                      size: 50,
+              InkWell(
+                onTap: () {
+                  Navigator.pushNamed(context, 'chooseaction');
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 20),
+                  width: double.infinity,
+                  height: screenHeight * 0.1,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color.fromARGB(255, 255, 255, 255)
+                            .withOpacity(0.5),
+                        const Color.fromARGB(255, 120, 159, 203)
+                            .withOpacity(0.8)
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
                     ),
                   ),
-                ],
+                  child: const Center(
+                    child: Text(
+                      'View Detection Results',
+                      style: TextStyle(
+                        color: Color.fromARGB(255, 5, 76, 156),
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
               ),
+              // Row(
+              //   mainAxisAlignment: MainAxisAlignment.center,
+              //   children: [
+              //     ElevatedButton(
+              //       onPressed: () => pickImageFromGallery(context),
+              //       style: ElevatedButton.styleFrom(
+              //         backgroundColor: Colors.white,
+              //         iconColor: const Color(0xff0E67D0).withOpacity(0.8),
+              //         shape: const CircleBorder(),
+              //         padding: const EdgeInsets.all(10),
+              //       ),
+              //       child: const Icon(
+              //         Icons.photo_library_rounded,
+              //         size: 40,
+              //       ),
+              //     ),
+              //     const SizedBox(width: 24),
+              //     ElevatedButton(
+              //       onPressed: () => pickImageFromCamera(context),
+              //       style: ElevatedButton.styleFrom(
+              //         backgroundColor: Colors.white,
+              //         iconColor: const Color(0xff0E67D0).withOpacity(0.8),
+              //         shape: const CircleBorder(),
+              //         padding: const EdgeInsets.all(10),
+              //       ),
+              //       child: const Icon(
+              //         Icons.camera_alt,
+              //         size: 50,
+              //       ),
+              //     ),
+              //   ],
+              // ),
               const Spacer(flex: 1),
             ],
           )

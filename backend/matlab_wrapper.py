@@ -5,7 +5,7 @@ def run_matlab_detection(image_path):
     abs_path = os.path.abspath(image_path)
     matlab_script = f"""
     addpath('{os.path.dirname(abs_path)}');
-    detect2('{abs_path}');
+    detect_face_manual('{abs_path}');
     exit;
     """
     try:

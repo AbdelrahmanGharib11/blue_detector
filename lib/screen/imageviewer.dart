@@ -1,19 +1,28 @@
 import 'dart:io';
-import 'package:blue_detector/widgets/loading_indicator.dart';
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:blue_detector/services/imageprovider.dart'
     as app_image_provider;
+import 'package:blue_detector/services/recognizeprovider.dart'
+    as app_reco_provider;
+import 'package:blue_detector/widgets/custombutton.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class ImageViewer extends StatelessWidget {
-  const ImageViewer({super.key});
+  final File? imageFile;
+
+  const ImageViewer({super.key, this.imageFile});
 
   @override
   Widget build(BuildContext context) {
+    int key = 0;
     var screenHeight = MediaQuery.sizeOf(context).height;
-    final imagefile = ModalRoute.of(context)!.settings.arguments as File;
+    final recoProvider = Provider.of<app_reco_provider.RecognizeProvider>(
+      context,
+    );
     final imageProvider =
         Provider.of<app_image_provider.ImageProvider>(context);
+    final File displayImage = imageFile ??
+        (ModalRoute.of(context)?.settings.arguments as File? ?? File(''));
 
     return Scaffold(
       appBar: AppBar(
@@ -37,7 +46,6 @@ class ImageViewer extends StatelessWidget {
         centerTitle: true,
       ),
       body: Stack(
-        alignment: Alignment.center,
         children: [
           Container(
             height: screenHeight,
@@ -57,79 +65,63 @@ class ImageViewer extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 20.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Container(
-                    height: screenHeight * 0.4,
-                    clipBehavior: Clip.antiAlias,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Image.file(
-                      imagefile,
-                      fit: BoxFit.cover,
-                    )),
-                SizedBox(height: screenHeight * 0.15),
-                InkWell(
-                  onTap: () async {
+                  width: double.infinity,
+                  height: screenHeight * 0.52,
+                  clipBehavior: Clip.hardEdge,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Image.file(
+                    displayImage,
+                    fit: BoxFit.fill,
+                  ),
+                ),
+                SizedBox(height: screenHeight * 0.1),
+                CustomButton(
+                  screenHeight: screenHeight,
+                  text: 'View Detection Results',
+                  isProcessing: imageProvider.isProcessing,
+                  onTab: () async {
+                    key = 0;
                     final imageProvider =
                         Provider.of<app_image_provider.ImageProvider>(context,
                             listen: false);
-                    await imageProvider.processImage(imagefile);
+                    await imageProvider.processImage(displayImage);
                     if (imageProvider.processedImage != null) {
-                      Navigator.pushNamed(context, 'resultscreen');
+                      Navigator.pushNamed(context, 'resultscreen',
+                          arguments: key);
                     }
                   },
-                  child: Container(
-                    width: double.infinity,
-                    height: screenHeight * 0.1,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      gradient: LinearGradient(
-                        colors: [
-                          const Color(0xff0E67D0).withOpacity(0.5),
-                          const Color(0xff0E67D0).withOpacity(0.8)
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                      ),
+                ),
+                const SizedBox(
+                  height: 16,
+                ),
+                CustomButton(
+                    screenHeight: screenHeight,
+                    text: 'View Recognition Results',
+                    onTab: () async {
+                      key = 1;
+
+                      final recoProvider =
+                          Provider.of<app_reco_provider.RecognizeProvider>(
+                              context,
+                              listen: false);
+                      await recoProvider.recognizeFace(displayImage);
+                      if (recoProvider.recognitionResults != null) {
+                        Navigator.pushNamed(context, 'resultscreen',
+                            arguments: key);
+                      }
+                    },
+                    isProcessing: recoProvider.isLoading
+                    // Provider.of<app_reco_provider.RecognizeProvider>(context,
+                    //         listen: false)
+                    //     .isLoading,
                     ),
-                    child: imageProvider.isProcessing
-                        ? const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Loading',
-                                style: TextStyle(
-                                  color: Color.fromARGB(255, 7, 61, 123),
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              SizedBox(width: 10),
-                              ThreeDotLoading(
-                                color: Color.fromARGB(255, 7, 61, 123),
-                                size: 24,
-                              ),
-                            ],
-                          )
-                        : const Center(
-                            child: Text(
-                              'View Detection Results',
-                              style: TextStyle(
-                                color: Color.fromARGB(255, 7, 61, 123),
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                  ),
-                )
               ],
             ),
-          )
+          ),
         ],
       ),
     );

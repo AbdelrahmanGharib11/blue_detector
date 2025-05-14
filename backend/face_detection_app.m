@@ -1,1083 +1,568 @@
-function face_detection_gui_manual_skin(image_path)
-    % Clear workspace and command window
-    clc;
-    close all;
-    
-    % Starting message for logging
-    disp('Starting face detection process...');
-    
-    % Validate input arguments
-    if nargin < 1 || isempty(image_path)
-        error('Image path is required');
-    end
-    
-    % Validate image file
-    try
-        img = imread(image_path);
-        disp(['Successfully loaded image from: ', image_path]);
-    catch e
-        error(['Failed to load image: ', e.message]);
-    end
-    
-    % Create figure for processing visualization (hidden)
-    h_fig = figure('Visible', 'off');
-    
-    % STEP 1: Multi-method Face Detection Approach
-    % Method 1: Enhanced Skin Detection
-    disp('Applying skin detection...');
-    skinMask = detectSkinColor(img);
-    
-    % STEP 2: Improved Morphological Operations
-    disp('Applying morphological operations...');
-    skinMask = cleanSkinMask(skinMask);
-    
-    % STEP 3: Enhanced Region Filtering
-    disp('Finding face regions...');
-    [labeledMask, regions] = findFaceRegions(skinMask);
-    
-    % STEP 4: Multiple Feature Verification
-    disp('Verifying face candidates...');
-    faceBoundingBoxes = verifyFaceCandidates(img, regions);
-    
-    % Method 2: Try Viola-Jones cascade object detector if available
-    try
-        disp('Attempting Viola-Jones detection...');
-        violaJonesBoxes = detectViolaJones(img);
-        % Combine results from both methods
-        faceBoundingBoxes = combineDetections(faceBoundingBoxes, violaJonesBoxes);
-        disp('Combined detection results successfully');
-    catch e
-        disp(['Viola-Jones detector failed: ', e.message]);
-        disp('Using only skin-based detection.');
-    end
-    
-    % If still no faces detected, try with adaptive thresholding approach
-    if isempty(faceBoundingBoxes)
-        disp('No faces detected with standard approaches, trying adaptive method...');
-        faceBoundingBoxes = tryAdaptiveDetection(img, skinMask);
-    end
-    
-    % STEP 5: Draw Results on Original Image and save
-    disp('Drawing results and saving output image...');
-    output_image = drawResultsOnImage(img, faceBoundingBoxes);
-    
-    % Generate guaranteed valid output path
-    try
-        % Get absolute path of input image
-        image_path = fullfile(image_path);
-        [filepath, name, ext] = fileparts(image_path);
-        
-        % If no path specified, use current directory
-        if isempty(filepath)
-            filepath = pwd;
-        end
-        
-        % Create output filename with timestamp
-        timestamp = datestr(now, 'yyyy-mm-dd_HH-MM-SS');
-        output_filename = [name, '_output_', timestamp, ext];
-        output_path = fullfile(filepath, output_filename);
-        
-       
-        
-        % Save the output image with explicit error checking
-        if isempty(output_path)
-            error('Generated output path is empty');
-        end
-        
-        imwrite(output_image, output_path);
-        disp(['Output image successfully saved to: ', output_path]);
-        
-    catch e
-        % Fallback save location if primary save fails
-        warning(['Primary save failed: ', e.message]);
-        try
-            % Try saving to current directory
-            output_path = fullfile(pwd, ['face_detection_output_', datestr(now, 'yyyy-mm-dd_HH-MM-SS'), '.png']);
-            imwrite(output_image, output_path);
-            disp(['Output image saved to fallback location: ', output_path]);
-        catch e2
-            error(['Failed to save output image: ', e2.message]);
-        end
-    end
-    
-    % Provide success message
-    disp('Successfully processed image');
-    
-    % Close all figures
-    close all;
-end
+%% Simple Face Recognition System
+% This script implements a direct comparison face recognition system:
+% 1. Accesses a folder with team members' images (named after each person)
+% 2. Asks for a test image to identify
+% 3. Compares the test image against all database images
+% 4. Outputs the best match
 
-function output_image = drawResultsOnImage(img, faceBoundingBoxes)
-    % Create a copy of the image for drawing
-    output_image = img;
-    
-    % Get image dimensions for text sizing
-    [imgHeight, imgWidth, ~] = size(img);
-    
-    % Determine font size relative to image size
-    fontSize = max(ceil(imgWidth/100), 1);
-    lineWidth = max(ceil(imgWidth/500), 2);
-    
-    % Calculate RGB for green text that will be visible
-    if mean(img(:)) > 128
-        textColor = [0, 180, 0];  % Darker green for bright images
-    else
-        textColor = [0, 255, 0];  % Bright green for dark images
-    end
-    
-    % If faces were detected
-    if ~isempty(faceBoundingBoxes)
-        % Draw each bounding box
-        for i = 1:size(faceBoundingBoxes, 1)
-            % Extract bounding box coordinates
-            x = round(faceBoundingBoxes(i,1));
-            y = round(faceBoundingBoxes(i,2));
-            w = round(faceBoundingBoxes(i,3));
-            h = round(faceBoundingBoxes(i,4));
-            
-            % Ensure coordinates are within image bounds
-            x1 = max(1, x);
-            y1 = max(1, y);
-            x2 = min(imgWidth, x + w);
-            y2 = min(imgHeight, y + h);
-            
-            % Draw rectangle borders
-            % Top border
-            output_image(y1:y1+lineWidth-1, x1:x2, 1) = textColor(1);
-            output_image(y1:y1+lineWidth-1, x1:x2, 2) = textColor(2);
-            output_image(y1:y1+lineWidth-1, x1:x2, 3) = textColor(3);
-            
-            % Bottom border
-            output_image(y2-lineWidth+1:y2, x1:x2, 1) = textColor(1);
-            output_image(y2-lineWidth+1:y2, x1:x2, 2) = textColor(2);
-            output_image(y2-lineWidth+1:y2, x1:x2, 3) = textColor(3);
-            
-            % Left border
-            output_image(y1:y2, x1:x1+lineWidth-1, 1) = textColor(1);
-            output_image(y1:y2, x1:x1+lineWidth-1, 2) = textColor(2);
-            output_image(y1:y2, x1:x1+lineWidth-1, 3) = textColor(3);
-            
-            % Right border
-            output_image(y1:y2, x2-lineWidth+1:x2, 1) = textColor(1);
-            output_image(y1:y2, x2-lineWidth+1:x2, 2) = textColor(2);
-            output_image(y1:y2, x2-lineWidth+1:x2, 3) = textColor(3);
-            
-            % Place face number label
-            labelText = sprintf('Face %d', i);
-            output_image = insertText(output_image, [x1, max(1, y1-fontSize*1.5)], ...
-                           labelText, 'FontSize', fontSize, 'BoxColor', 'black', ...
-                           'TextColor', 'green', 'BoxOpacity', 0.6);
-        end
-        
-        % Add detection count at the top of the image
-        countText = sprintf('%d faces detected', size(faceBoundingBoxes, 1));
-        output_image = insertText(output_image, [10, 10], countText, ...
-                      'FontSize', fontSize+2, 'BoxColor', 'black', ...
-                      'TextColor', 'green', 'BoxOpacity', 0.6);
-    else
-        % No faces detected message
-        output_image = insertText(output_image, [imgWidth/2-100, imgHeight/2], ...
-                      'No faces detected', 'FontSize', fontSize+4, ...
-                      'BoxColor', 'black', 'TextColor', 'red', 'BoxOpacity', 0.6);
-    end
-end
+%% Initialize and check for database folder
+clear;
+clc;
+close all;
 
-function skinMask = detectSkinColor(img)
-    % Enhanced skin color detection using multiple color spaces
-    % and adaptive thresholding based on image statistics
-    
-    % Convert to different color spaces for robust skin detection
-    ycbcrImg = rgb2ycbcr(img);
-    Cb = ycbcrImg(:,:,2);  % Blue difference
-    Cr = ycbcrImg(:,:,3);  % Red difference
-    
-    hsvImg = rgb2hsv(img);
-    H = hsvImg(:,:,1);     % Hue
-    S = hsvImg(:,:,2);     % Saturation
-    V = hsvImg(:,:,3);     % Value
-    
-    labImg = rgb2lab(img); % Add LAB color space for better skin detection
-    a = labImg(:,:,2);     % Red/green component
-    b = labImg(:,:,3);     % Blue/yellow component
-    
-    % Calculate normalized RGB for illumination invariance
-    R = double(img(:,:,1));
-    G = double(img(:,:,2));
-    B = double(img(:,:,3));
-    sumRGB = R + G + B;
-    
-    % Avoid division by zero
-    sumRGB(sumRGB == 0) = 1;
-    
-    % Calculate normalized RGB
-    r = R ./ sumRGB;
-    g = G ./ sumRGB;
-    
-    % Adaptive thresholding based on image statistics
-    % Get histogram statistics to adapt thresholds to the specific image
-    meanCr = mean(Cr(:));
-    stdCr = std(double(Cr(:)));
-    meanCb = mean(Cb(:));
-    stdCb = std(double(Cb(:)));
-    
-    % Adjust YCbCr thresholds based on image statistics
-    CrMin = max(125, meanCr - 1.5 * stdCr);
-    CrMax = min(180, meanCr + 1.5 * stdCr);
-    CbMin = max(75, meanCb - 1.5 * stdCb);
-    CbMax = min(130, meanCb + 1.5 * stdCb);
-    
-    % Create masks using multiple color space rules with adaptive thresholds
-    ycbcrMask = (Cb >= CbMin) & (Cb <= CbMax) & (Cr >= CrMin) & (Cr <= CrMax);
-    
-    % HSV rules - more inclusive for diverse skin tones
-    hsvMask = (H >= 0) & (H <= 0.2) & (S >= 0.1) & (S <= 0.8) & (V >= 0.2);
-    
-    % LAB color space rules for skin detection
-    labMask = (a >= 5) & (a <= 35) & (b >= 10) & (b <= 60);
-    
-    % Normalized RGB rules
-    rgbMask = (r > 0.3) & (r < 0.7) & (g > 0.2) & (g < 0.5);
-    
-    % Combine masks with weighted approach
-    % Give more weight to YCbCr and LAB which are often better for skin detection
-    skinMask = (ycbcrMask & labMask) | (hsvMask & rgbMask) | (ycbcrMask & rgbMask);
-end
+% Database folder path
+databasePath = "C:\Users\SaWa\OneDrive\Pictures\Saved Pictures\whats\results";
 
-function cleanedMask = cleanSkinMask(skinMask)
-    % Enhanced morphological operations with adaptive structuring elements
+% Check if database folder exists
+if ~exist(databasePath, 'dir')
+    % Create folder if it doesn't exist
+    mkdir(databasePath);
+    fprintf('Database folder created at: %s\n', databasePath);
+    fprintf('Please add team member images to this folder.\n');
+    fprintf('Each image should be named after the person (e.g., "John_Smith.jpg").\n\n');
     
-    % Get image dimensions to adapt structuring element sizes
-    [height, width] = size(skinMask);
-    imgDiag = sqrt(height^2 + width^2);
-    
-    % Adaptive structuring element sizes based on image dimensions
-    se1Size = max(3, round(imgDiag / 100));  % For closing
-    se2Size = max(2, round(imgDiag / 150));  % For opening
-    
-    % Remove small isolated areas (noise)
-    cleanedMask = bwareaopen(skinMask, max(100, round(height * width / 5000)));
-    
-    % Create structuring elements for morphological operations
-    se1 = strel('disk', se1Size);
-    se2 = strel('disk', se2Size);
-    
-    % Close the mask (dilation followed by erosion)
-    cleanedMask = imclose(cleanedMask, se1);
-    
-    % Open the mask (erosion followed by dilation)
-    cleanedMask = imopen(cleanedMask, se2);
-    
-    % Fill holes
-    cleanedMask = imfill(cleanedMask, 'holes');
-    
-    % Second round of area opening with larger size
-    cleanedMask = bwareaopen(cleanedMask, max(200, round(height * width / 3000)));
-    
-    % Edge-preserving smoothing using median filter
-    cleanedMask = medfilt2(cleanedMask, [5 5]);
-end
-
-function [labeledMask, regions] = findFaceRegions(skinMask)
-    % Enhanced connected component analysis with improved filtering
-    
-    % Label connected components
-    [labeledMask, numRegions] = bwlabel(skinMask);
-    
-    % Get properties of each region with expanded metrics
-    regionProps = regionprops(labeledMask, 'Area', 'BoundingBox', 'Centroid', 'Extent', ...
-                            'MajorAxisLength', 'MinorAxisLength', 'Orientation', 'Solidity', ...
-                            'Perimeter', 'EulerNumber');
-    
-    % Image size for relative calculations
-    [imgHeight, imgWidth] = size(skinMask);
-    imgArea = imgHeight * imgWidth;
-    imgDiag = sqrt(imgHeight^2 + imgWidth^2);
-    
-    % Initialize output structure
-    regions = [];
-    
-    % Enhanced filtering with more sophisticated criteria
-    for i = 1:numRegions
-        area = regionProps(i).Area;
-        bbox = regionProps(i).BoundingBox;
-        solidity = regionProps(i).Solidity;
-        extent = regionProps(i).Extent;
-        perimeter = regionProps(i).Perimeter;
-        eulerNumber = regionProps(i).EulerNumber;
-        
-        % Extract dimensions
-        width = bbox(3);
-        height = bbox(4);
-        
-        % Calculate perimeter-to-area ratio (compact shapes have lower values)
-        perimeterAreaRatio = perimeter / sqrt(area);
-        
-        % Skip regions that are too small (adaptive threshold)
-        minAreaThreshold = min(0.01, 500 / imgArea);
-        if area < (imgArea * minAreaThreshold)
-            continue;
-        end
-        
-        % Skip regions that are too large (adaptive threshold)
-        maxAreaThreshold = min(0.6, max(0.3, 30000 / imgArea));
-        if area > (imgArea * maxAreaThreshold)
-            continue;
-        end
-        
-        % Enhanced aspect ratio filtering (more permissive)
-        aspectRatio = height / width;
-        if aspectRatio < 0.8 || aspectRatio > 2.2
-            continue;
-        end
-        
-        % Enhanced solidity filtering (faces are fairly solid)
-        if solidity < 0.5  % More permissive
-            continue;
-        end
-        
-        % Enhanced extent filtering
-        if extent < 0.35  % More permissive
-            continue;
-        end
-        
-        % Check perimeter-to-area ratio (compact shapes like faces have lower values)
-        if perimeterAreaRatio > 0.2 * imgDiag / sqrt(imgArea)
-            continue;
-        end
-        
-        % Add to output with additional metrics
-        region.BoundingBox = bbox;
-        region.Area = area;
-        region.AspectRatio = aspectRatio;
-        region.Solidity = solidity;
-        region.Extent = extent;
-        region.PerimeterAreaRatio = perimeterAreaRatio;
-        region.EulerNumber = eulerNumber;
-        regions = [regions; region];
-    end
-    
-    % Sort regions by likelihood of being a face (combines multiple metrics)
-    if ~isempty(regions)
-        scores = calculateRegionScores(regions);
-        [~, sortIndices] = sort(scores, 'descend');
-        regions = regions(sortIndices);
-    end
-end
-
-function scores = calculateRegionScores(regions)
-    % Calculate composite scores for regions based on face-like characteristics
-    
-    scores = zeros(length(regions), 1);
-    
-    for i = 1:length(regions)
-        % Ideal values for face regions (empirically determined)
-        idealAspectRatio = 1.3;
-        idealSolidity = 0.95;
-        idealExtent = 0.75;
-        
-        % Calculate distance from ideal values (normalized)
-        aspectRatioScore = 1 - min(1, abs(regions(i).AspectRatio - idealAspectRatio) / 1.0);
-        solidityScore = regions(i).Solidity;
-        extentScore = regions(i).Extent;
-        
-        % Euler number (number of objects minus number of holes)
-        % Faces typically have some holes (eyes, mouth)
-        eulerScore = 1;
-        if isfield(regions(i), 'EulerNumber')
-            eulerScore = regions(i).EulerNumber <= 0;
-            if eulerScore
-                eulerScore = 0.8;
-            else
-                eulerScore = 0.5;
-            end
-        end
-        
-        % Weighted combination
-        scores(i) = 0.4 * aspectRatioScore + 0.3 * solidityScore + ...
-                    0.2 * extentScore + 0.1 * eulerScore;
-    end
-end
-
-function faceBoundingBoxes = verifyFaceCandidates(img, regions)
-    % Enhanced face verification with improved feature detection
-    
-    faceBoundingBoxes = [];
-    
-    if isempty(regions)
+    % Ask user if they want to continue
+    userInput = input('Would you like to add images now? Press Enter when ready or type "exit" to quit: ', 's');
+    if strcmpi(userInput, 'exit')
         return;
     end
     
-    % Convert to grayscale
+    % Allow time for user to add images
+    fprintf('Please add your images to the folder now.\n');
+    fprintf('Press Enter when you have finished adding images...\n');
+    pause;
+end
+
+%% Load database images
+fprintf('Loading database images...\n');
+
+% Get list of all image files in the database folder
+imageFiles = dir(fullfile(databasePath, '*.jpg'));
+imageFiles = [imageFiles; dir(fullfile(databasePath, '*.png'))];
+imageFiles = [imageFiles; dir(fullfile(databasePath, '*.bmp'))];
+
+% Check if any images were found
+if isempty(imageFiles)
+    fprintf('No images found in the database folder.\n');
+    fprintf('Please add images to: %s\n', databasePath);
+    return;
+end
+
+% Display number of images found
+fprintf('Found %d images in the database.\n', length(imageFiles));
+
+% Load database images and extract face features
+databaseFeatures = cell(length(imageFiles), 1);
+personNames = cell(length(imageFiles), 1);
+
+% Create face detector
+faceDetector = vision.CascadeObjectDetector();
+
+% Create a debugging figure to visualize face extraction
+debugFig = figure('Name', 'Face Processing', 'Position', [150, 150, 800, 600]);
+
+for i = 1:length(imageFiles)
+    % Load image
+    imgPath = fullfile(databasePath, imageFiles(i).name);
+    img = imread(imgPath);
+    
+    % Get person name from filename (remove extension)
+    [~, personName, ~] = fileparts(imageFiles(i).name);
+    personNames{i} = strrep(personName, '_', ' '); % Replace underscores with spaces
+    
+    % Display original image
+    figure(debugFig);
+    subplot(2, 2, 1);
+    imshow(img);
+    title(['Original: ', personNames{i}]);
+    
+    % Convert to grayscale if needed
     if size(img, 3) == 3
         grayImg = rgb2gray(img);
     else
         grayImg = img;
     end
     
-    % Apply histogram equalization for better feature detection
-    grayImg = adapthisteq(grayImg);
+    % Display grayscale image
+    subplot(2, 2, 2);
+    imshow(grayImg);
+    title('Grayscale');
     
-    % For each candidate region
-    for i = 1:length(regions)
-        bbox = regions(i).BoundingBox;
+    % Detect face
+    bbox = step(faceDetector, grayImg);
+    
+    % If no face detected, use whole image
+    if isempty(bbox)
+        fprintf('Warning: No face detected in %s. Using whole image.\n', imageFiles(i).name);
+        faceImg = imresize(grayImg, [100, 100]);
         
-        % Extract coordinates with padding
-        x = max(1, round(bbox(1) - bbox(3) * 0.1));
-        y = max(1, round(bbox(2) - bbox(4) * 0.1));
-        width = min(size(grayImg, 2) - x + 1, round(bbox(3) * 1.2));
-        height = min(size(grayImg, 1) - y + 1, round(bbox(4) * 1.2));
+        % Display the whole image as face
+        subplot(2, 2, 3);
+        imshow(grayImg);
+        title('No Face Detected - Using Whole Image');
+    else
+        % If multiple faces detected, use the largest one
+        if size(bbox, 1) > 1
+            [~, idx] = max(bbox(:,3) .* bbox(:,4)); % Find largest face
+            bbox = bbox(idx, :);
+        end
         
-        % Ensure box doesn't exceed image boundaries
-        x2 = min(size(grayImg, 2), x + width - 1);
-        y2 = min(size(grayImg, 1), y + height - 1);
+        % Show face detection result
+        imgWithRect = insertShape(img, 'Rectangle', bbox, 'LineWidth', 3, 'Color', 'yellow');
+        subplot(2, 2, 3);
+        imshow(imgWithRect);
+        title('Face Detected');
         
-        % Extract region with padding
-        faceCandidate = grayImg(y:y2, x:x2);
+        % Extract face region and resize to standard size
+        faceImg = imcrop(grayImg, bbox);
+        faceImg = imresize(faceImg, [100, 100]);
+    end
+    
+    % Apply histogram equalization to normalize lighting
+    faceImg = histeq(faceImg);
+    
+    % Display the processed face
+    subplot(2, 2, 4);
+    imshow(faceImg);
+    title('Processed Face (Stored in Database)');
+    
+    % Extract features using our robust features function
+    databaseFeatures{i} = extractRobustFeatures(faceImg);
+    
+    % Display progress
+    fprintf('Processed %d/%d: %s\n', i, length(imageFiles), personNames{i});
+    pause(1); % Pause to allow viewing
+end
+
+% Close the debug figure
+if ishandle(debugFig)
+    close(debugFig);
+end
+
+fprintf('Database loaded successfully!\n\n');
+
+%% Main recognition loop
+while true
+    % Ask user for test image
+    fprintf('Face Recognition System\n');
+    fprintf('1. Select image to identify\n');
+    fprintf('2. Use webcam\n');
+    fprintf('3. Exit\n');
+    
+    choice = input('Enter your choice (1-3): ');
+    
+    if choice == 3
+        % Exit the program
+        fprintf('Exiting program. Goodbye!\n');
+        break;
         
-        % Skip if region is too small for analysis
-        if numel(faceCandidate) < 100
+    elseif choice == 1
+        % Let user select an image
+        [file, path] = uigetfile({'*.jpg;*.png;*.bmp', 'Image Files'}, 'Select an image');
+        
+        if file == 0
+            % User canceled
+            fprintf('Selection canceled.\n\n');
             continue;
         end
         
-        % Apply enhanced eye detection
-        [hasEyes, eyeScore] = detectEyesInRegion(faceCandidate);
+        % Process selected image
+        testImg = imread(fullfile(path, file));
+        [testImgOut, matchedImgOut, matchedPersonName, confidence] = processAndIdentify(testImg, databaseFeatures, personNames, faceDetector, databasePath, imageFiles);
         
-        % Apply improved edge analysis
-        edgeDensity = calculateEdgeDensity(faceCandidate);
-        
-        % Apply enhanced symmetry analysis
-        symmetryScore = calculateSymmetry(faceCandidate);
-        
-        % Apply improved texture analysis
-        textureScore = calculateTextureVariability(faceCandidate);
-        
-        % Apply facial feature detection (nose, mouth)
-        [hasFeatures, featureScore] = detectFacialFeatures(faceCandidate);
-        
-        % Calculate gradient coherence (face regions have structured gradients)
-        gradientScore = calculateGradientCoherence(faceCandidate);
-        
-        % Combine scores with optimized weights
-        overallScore = 0.25 * eyeScore + 0.2 * symmetryScore + ...
-                       0.15 * edgeDensity + 0.15 * textureScore + ...
-                       0.15 * featureScore + 0.1 * gradientScore;
-        
-        % More adaptive threshold based on image quality
-        adaptiveThreshold = 0.25;
-        
-        % Either good eye detection or good overall feature score
-        if (hasEyes && eyeScore > 0.4) || overallScore > adaptiveThreshold
-            % Adjust bounding box to be more accurate
-            adjustedBox = adjustBoundingBox(bbox, hasEyes, eyeScore, size(grayImg));
-            faceBoundingBoxes = [faceBoundingBoxes; adjustedBox];
-        end
-    end
-    
-    % Apply improved Non-Maximum Suppression
-    if size(faceBoundingBoxes, 1) > 1
-        faceBoundingBoxes = enhancedNonMaximumSuppression(faceBoundingBoxes);
-    end
-end
-
-function adjustedBox = adjustBoundingBox(bbox, hasEyes, eyeScore, imgSize)
-    % Adjust bounding box based on eye detection and typical face proportions
-    
-    x = bbox(1);
-    y = bbox(2);
-    width = bbox(3);
-    height = bbox(4);
-    
-    % If strong eye detection, adjust height to typical face proportions
-    if hasEyes && eyeScore > 0.6
-        % Eyes are typically at 40-45% from top of face
-        eyePosition = 0.42;
-        
-        % Estimate full face height based on eye position
-        newHeight = height / eyePosition;
-        
-        % Adjust y position to keep eyes at same position
-        heightDiff = newHeight - height;
-        newY = max(1, y - heightDiff * eyePosition);
-        
-        % Update box
-        y = newY;
-        height = min(imgSize(1) - y + 1, newHeight);
-    end
-    
-    % Enforce typical face aspect ratio
-    idealAspectRatio = 1.3;  % height/width
-    currentAspectRatio = height / width;
-    
-    if abs(currentAspectRatio - idealAspectRatio) > 0.3
-        if currentAspectRatio > idealAspectRatio
-            % Too tall, increase width
-            newWidth = height / idealAspectRatio;
-            widthDiff = newWidth - width;
-            x = max(1, x - widthDiff / 2);
-            width = min(imgSize(2) - x + 1, newWidth);
+        % Display the returned images
+        fprintf('\nReturned Images:\n');
+        fprintf('- Test image size: %dx%dx%d\n', size(testImgOut));
+        if ~isempty(matchedImgOut)
+            fprintf('- Matched image size: %dx%dx%d\n', size(matchedImgOut));
+            fprintf('- Matched person: %s (%.1f%% confidence)\n', matchedPersonName, confidence);
+            
+            % Create a new figure to display the returned images
+            returnedFig = figure('Name', 'Returned Images', 'Position', [300, 300, 800, 400]);
+            subplot(1, 2, 1);
+            imshow(testImgOut);
+            title('Returned Test Image');
+            
+            subplot(1, 2, 2);
+            imshow(matchedImgOut);
+            title(sprintf('Returned Match: %s', matchedPersonName));
         else
-            % Too wide, increase height
-            newHeight = width * idealAspectRatio;
-            heightDiff = newHeight - height;
-            y = max(1, y - heightDiff / 2);
-            height = min(imgSize(1) - y + 1, newHeight);
-        end
-    end
-    
-    adjustedBox = [x, y, width, height];
-end
-
-function [hasEyes, score] = detectEyesInRegion(faceRegion)
-    % Enhanced eye detection using multiple approaches
-    
-    % Check if region is valid
-    if numel(faceRegion) == 0 || min(size(faceRegion)) < 10
-        hasEyes = false;
-        score = 0;
-        return;
-    end
-    
-    % Resize for consistent analysis
-    faceRegion = imresize(faceRegion, [100, 80]);
-    
-    % Expected eye region (upper part of face)
-    eyeRegion = faceRegion(10:45, :);
-    
-    % APPROACH 1: Gradient-based eye detection
-    % Calculate horizontal and vertical gradients
-    [Gx, Gy] = imgradientxy(eyeRegion);
-    absGx = abs(Gx);
-    
-    % Enhance gradient map
-    enhancedGx = imadjust(mat2gray(absGx));
-    
-    % Threshold to get potential eye edges
-    eyeEdges = enhancedGx > 0.3;
-    eyeEdges = bwareaopen(eyeEdges, 5);
-    
-    % Find connected components in eye edges
-    [labeledEyes, numEyeRegions] = bwlabel(eyeEdges);
-    eyeProps = regionprops(labeledEyes, 'Area', 'BoundingBox', 'Centroid', 'Extent');
-    
-    % APPROACH 2: Local minima detection (eyes are often darker)
-    % Apply minimum filter to detect dark regions
-    darkRegions = imerode(eyeRegion, strel('disk', 2));
-    darkRegions = imregionalmin(darkRegions);
-    darkRegions = bwareaopen(darkRegions, 3);
-    
-    % Find connected components in dark regions
-    [labeledDark, numDarkRegions] = bwlabel(darkRegions);
-    darkProps = regionprops(labeledDark, 'Area', 'BoundingBox', 'Centroid');
-    
-    % APPROACH 3: Haar-like feature approximation
-    % Create simple Haar-like features for eye detection
-    haarScore = calculateHaarLikeEyeFeatures(eyeRegion);
-    
-    % Initialize values
-    hasEyes = false;
-    score = 0.3;  % Default minimal score
-    
-    % Check gradient-based detection
-    if numEyeRegions >= 2
-        centers = zeros(min(numEyeRegions, 10), 2);
-        
-        for j = 1:min(numEyeRegions, 10)
-            if j <= length(eyeProps)
-                bbox = eyeProps(j).BoundingBox;
-                centers(j,:) = [bbox(1) + bbox(3)/2, bbox(2) + bbox(4)/2];
-            end
+            fprintf('- No match found\n');
         end
         
-        % Check for horizontally aligned components
-        centersX = centers(:,1);
-        centersY = centers(:,2);
-        
-        % Find pairs of potential eyes
-        for j = 1:size(centers, 1)
-            for k = j+1:size(centers, 1)
-                % Check horizontal alignment
-                yDiff = abs(centersY(j) - centersY(k));
-                xDiff = abs(centersX(j) - centersX(k));
+    elseif choice == 2
+        % Check if webcam is available
+        try
+            cam = webcam();
+            
+            % Create figure for display
+            hFig = figure('Name', 'Webcam Face Recognition', 'Position', [100, 100, 800, 600]);
+            hAx = axes('Parent', hFig);
+            
+            % Instructions
+            fprintf('Webcam activated. Press "c" to capture image or "q" to quit.\n');
+            
+            % Main webcam loop
+            while ishandle(hFig)
+                % Capture frame
+                img = snapshot(cam);
                 
-                % Horizontally separated and vertically aligned
-                if yDiff < 5 && xDiff > 10 && xDiff < 50
-                    hasEyes = true;
-                    score = max(score, 0.6 - (yDiff / 10));
+                % Display frame
+                image(img, 'Parent', hAx);
+                title('Press "c" to capture or "q" to quit');
+                axis(hAx, 'image');
+                drawnow;
+                
+                % Check for keypresses
+                key = get(hFig, 'CurrentCharacter');
+                
+                if ~isempty(key)
+                    if key == 'c'
+                        % Capture current frame for recognition
+                        [testImgOut, matchedImgOut, matchedPersonName, confidence] = processAndIdentify(img, databaseFeatures, personNames, faceDetector, databasePath, imageFiles);
+                        
+                        % Display the returned images in a new figure
+                        if ~isempty(matchedImgOut)
+                            returnedFig = figure('Name', 'Webcam Match Result', 'Position', [300, 300, 800, 400]);
+                            subplot(1, 2, 1);
+                            imshow(testImgOut);
+                            title('Captured Image');
+                            
+                            subplot(1, 2, 2);
+                            imshow(matchedImgOut);
+                            title(sprintf('Match: %s (%.1f%%)', matchedPersonName, confidence));
+                            
+                            % Let the user explicitly close this window
+                            fprintf('Showing match result. Close the window when ready.\n');
+                        end
+                    elseif key == 'q'
+                        % Quit webcam mode
+                        break;
+                    end
+                    
+                    % Clear the key
+                    set(hFig, 'CurrentCharacter', '');
                 end
             end
+            
+            % Clean up
+            clear cam;
+            if ishandle(hFig)
+                close(hFig);
+            end
+            
+        catch
+            fprintf('Error: Webcam not available or not functioning properly.\n');
+        end
+    end
+end
+
+%% Function to extract robust features from face image
+function features = extractRobustFeatures(faceImg)
+    % This function extracts robust features from face images
+    % using a combination of techniques:
+    % 1. Image pixel intensities (flattened)
+    % 2. Local binary patterns for texture
+    % 3. Histogram of oriented gradients for shape
+    
+    % Ensure input is grayscale
+    if size(faceImg, 3) > 1
+        faceImg = rgb2gray(faceImg);
+    end
+    
+    % 1. Get pixel intensities as base features
+    pixelFeatures = double(faceImg(:));
+    
+    % 2. Extract simple texture features (simplified LBP-like)
+    % Compute horizontal and vertical gradients
+    [gx, gy] = gradient(double(faceImg));
+    gradMag = sqrt(gx.^2 + gy.^2);
+    
+    % Flatten gradient features
+    gradFeatures = gradMag(:);
+    
+    % 3. Extract histogram features from different regions
+    % Divide the image into 4x4 regions
+    [h, w] = size(faceImg);
+    regH = floor(h/4);
+    regW = floor(w/4);
+    
+    histFeatures = [];
+    for i = 0:3
+        for j = 0:3
+            % Extract region
+            rh = min(regH, h - i*regH);
+            rw = min(regW, w - j*regW);
+            if rh <= 0 || rw <= 0
+                continue;
+            end
+            
+            region = faceImg(i*regH+1:i*regH+rh, j*regW+1:j*regW+rw);
+            
+            % Compute histogram of the region with 8 bins
+            [counts, ~] = histcounts(region, 8);
+            
+            % Normalize histogram
+            if sum(counts) > 0
+                counts = counts / sum(counts);
+            end
+            
+            % Add to features
+            histFeatures = [histFeatures; counts(:)];
         end
     end
     
-    % Check dark region detection
-    if numDarkRegions >= 2
-        darkCenters = zeros(min(numDarkRegions, 10), 2);
-        
-        for j = 1:min(numDarkRegions, 10)
-            if j <= length(darkProps)
-                darkCenters(j,:) = darkProps(j).Centroid;
-            end
-        end
-        
-        % Check for horizontally aligned dark regions
-        for j = 1:size(darkCenters, 1)
-            for k = j+1:size(darkCenters, 1)
-                % Check horizontal alignment
-                yDiff = abs(darkCenters(j,2) - darkCenters(k,2));
-                xDiff = abs(darkCenters(j,1) - darkCenters(k,1));
-                
-                % Horizontally separated and vertically aligned
-                if yDiff < 5 && xDiff > 10 && xDiff < 50
-                    hasEyes = true;
-                    darkScore = 0.5 - (yDiff / 10);
-                    score = max(score, darkScore);
+    % Combine all features
+    features = [pixelFeatures; gradFeatures; histFeatures];
+    
+    % Normalize all features to have unit norm
+    if norm(features) > 0
+        features = features / norm(features);
+    end
+end
+
+%% Function to process image and identify person
+function [testImgOut, matchedImgOut, matchedPersonName, confidence] = processAndIdentify(testImg, databaseFeatures, personNames, faceDetector, databasePath, imageFiles)
+    % Create result figure
+    resultFig = figure('Name', 'Recognition Result', 'Position', [100, 100, 1000, 500]);
+    
+    % Initialize return values
+    testImgOut = testImg;  % Default to original test image
+    matchedImgOut = [];    % Empty if no match found
+    matchedPersonName = 'Unknown';
+    confidence = 0;
+    
+    % Display test image
+    subplot(1, 2, 1);
+    imshow(testImg);
+    title('Test Image');
+    
+    % Convert to grayscale if needed
+    if size(testImg, 3) == 3
+        grayImg = rgb2gray(testImg);
+    else
+        grayImg = testImg;
+    end
+    
+    % Detect face
+    bbox = step(faceDetector, grayImg);
+    
+    % If no face detected
+    if isempty(bbox)
+        subplot(1, 2, 2);
+        text(0.5, 0.5, 'No face detected!', 'FontSize', 18, 'HorizontalAlignment', 'center');
+        axis off;
+        fprintf('No face detected in the image.\n\n');
+        return;
+    end
+    
+    % If multiple faces detected, use the largest one
+    if size(bbox, 1) > 1
+        [~, idx] = max(bbox(:,3) .* bbox(:,4)); % Find largest face
+        bbox = bbox(idx, :);
+    end
+    
+    % Mark the detected face in the image
+    testImgMarked = insertShape(testImg, 'Rectangle', bbox, 'LineWidth', 3, 'Color', 'yellow');
+    subplot(1, 2, 1);
+    imshow(testImgMarked);
+    title('Detected Face');
+    
+    % Update the test image output to have the face marked
+    testImgOut = testImgMarked;
+    
+    % Extract face region and resize to standard size
+    faceImg = imcrop(grayImg, bbox);
+    faceImg = imresize(faceImg, [100, 100]);
+    
+    % Apply histogram equalization to normalize lighting
+    faceImg = histeq(faceImg);
+    
+    % Extract robust features from the test face
+    testFeatures = extractRobustFeatures(faceImg);
+    
+    % For debug: Display the processed test face
+    debugFig = figure('Name', 'Face Comparison Debug', 'Position', [150, 150, 1000, 400]);
+    
+    % Original test image with face detected
+    subplot(1, 4, 1);
+    imshow(testImgMarked);
+    title('Input Image');
+    
+    % The extracted and processed face
+    subplot(1, 4, 2);
+    imshow(faceImg);
+    title('Processed Test Face');
+    
+    % Calculate similarity with each database image
+    similarities = zeros(length(databaseFeatures), 1);
+    
+    % Find the closest match for visualization (even if below threshold)
+    bestSimilarity = -1;
+    bestMatch = 1;
+    
+    % Store database image filenames for later retrieval
+    dbImgPaths = cell(length(databaseFeatures), 1);
+    
+    for i = 1:length(databaseFeatures)
+        % Calculate similarity based on feature dimensionality
+        if numel(testFeatures) == numel(databaseFeatures{i})
+            % If dimensions match, use direct comparison
+            % Normalize both feature vectors
+            normTestFeatures = testFeatures / norm(testFeatures);
+            normDBFeatures = databaseFeatures{i} / norm(databaseFeatures{i});
+            
+            % Calculate cosine similarity (dot product of normalized vectors)
+            similarities(i) = dot(normTestFeatures, normDBFeatures);
+        else
+            % If dimensions don't match (fallback), use simpler method
+            % Extract representative image for visualization
+            if size(databaseFeatures{i}, 1) > 100*100  % It's likely a feature vector
+                dbFaceImg = reshape(1:100*100, [100, 100]); % Placeholder
+            else
+                % Try to reshape it to an image for visualization
+                try
+                    dbFaceImg = reshape(databaseFeatures{i}, [100, 100]);
+                catch
+                    % If reshape fails, create placeholder
+                    dbFaceImg = ones(100, 100) * mean(databaseFeatures{i});
                 end
             end
+            
+            % Calculate a similarity metric based on feature type
+            % For feature vectors, use Euclidean distance
+            dist = sqrt(sum((testFeatures(:) - databaseFeatures{i}(:)).^2));
+            similarities(i) = 1 / (1 + dist);  % Convert to similarity (higher is better)
         end
-    end
-    
-    % Incorporate Haar-like feature score
-    score = max(score, haarScore);
-    
-    % If any approach found eyes
-    hasEyes = score > 0.4;
-end
-
-function haarScore = calculateHaarLikeEyeFeatures(eyeRegion)
-    % Simple implementation of Haar-like features for eye detection
-    
-    [height, width] = size(eyeRegion);
-    haarScore = 0;
-    
-    % Skip if region is too small
-    if height < 10 || width < 20
-        return;
-    end
-    
-    % Define regions for Haar-like features
-    leftEyeX = round(width * 0.25);
-    rightEyeX = round(width * 0.75);
-    eyeY = round(height * 0.5);
-    windowSize = round(min(width, height) * 0.2);
-    
-    % Extract potential eye regions
-    leftEyeRegion = eyeRegion(max(1, eyeY-windowSize):min(height, eyeY+windowSize), ...
-                             max(1, leftEyeX-windowSize):min(width, leftEyeX+windowSize));
-    rightEyeRegion = eyeRegion(max(1, eyeY-windowSize):min(height, eyeY+windowSize), ...
-                              max(1, rightEyeX-windowSize):min(width, rightEyeX+windowSize));
-    
-    % Simple Haar-like feature: darker center, lighter surroundings
-    if numel(leftEyeRegion) > 0 && numel(rightEyeRegion) > 0
-        % Calculate intensity differences
-        leftCenter = mean(leftEyeRegion(:));
-        rightCenter = mean(rightEyeRegion(:));
         
-        % Get surrounding regions
-        surroundingLeft = eyeRegion(max(1, eyeY-windowSize):min(height, eyeY+windowSize), ...
-                                   max(1, leftEyeX-2*windowSize):max(1, leftEyeX-windowSize));
-        surroundingRight = eyeRegion(max(1, eyeY-windowSize):min(height, eyeY+windowSize), ...
-                                    min(width, rightEyeX+windowSize):min(width, rightEyeX+2*windowSize));
+        % Store the database image path for later
+        dbImgPaths{i} = fullfile(databasePath, imageFiles(i).name);
         
-        if numel(surroundingLeft) > 0 && numel(surroundingRight) > 0
-            surroundLeft = mean(surroundingLeft(:));
-            surroundRight = mean(surroundingRight(:));
+        % For visualization, show the best matching database face
+        if i == 1 || similarities(i) > bestSimilarity
+            bestSimilarity = similarities(i);
+            bestMatch = i;
             
-            % Eyes are typically darker than surroundings
-            leftDiff = surroundLeft - leftCenter;
-            rightDiff = surroundRight - rightCenter;
-            
-            if leftDiff > 10 && rightDiff > 10
-                haarScore = 0.5;
-            elseif leftDiff > 10 || rightDiff > 10
-                haarScore = 0.3;
+            % Try to show the actual database image
+            try
+                dbImg = imread(dbImgPaths{bestMatch});
+                subplot(1, 4, 3);
+                imshow(dbImg);
+            catch
+                % Fallback if we can't show the actual image
+                subplot(1, 4, 3);
+                if exist('dbFaceImg', 'var')
+                    imshow(uint8(dbFaceImg));
+                else
+                    text(0.5, 0.5, 'Database Image', 'HorizontalAlignment', 'center');
+                    axis off;
+                end
             end
+            title(['Database: ' personNames{bestMatch}]);
         end
-    end
-end
-
-function [hasFeatures, score] = detectFacialFeatures(faceRegion)
-    % Detect facial features like nose and mouth
-    
-    % Default values
-    hasFeatures = false;
-    score = 0.3;
-    
-    % Check if region is valid
-    if numel(faceRegion) == 0 || min(size(faceRegion)) < 20
-        return;
-    end
-    
-    % Resize for consistent analysis
-    faceRegion = imresize(faceRegion, [100, 80]);
-    
-    % Expected nose region (middle part of face)
-    noseRegion = faceRegion(40:60, 30:50);
-    
-    % Expected mouth region (lower part of face)
-    mouthRegion = faceRegion(65:85, 20:60);
-    
-    % Edge detection for facial features
-    noseEdges = edge(noseRegion, 'canny');
-    mouthEdges = edge(mouthRegion, 'canny');
-    
-    % Feature detection based on edge density and patterns
-    noseEdgeDensity = sum(noseEdges(:)) / numel(noseEdges);
-    mouthEdgeDensity = sum(mouthEdges(:)) / numel(mouthEdges);
-    
-    % Features detected if edge density is in reasonable range
-    hasNose = noseEdgeDensity > 0.05 && noseEdgeDensity < 0.3;
-    hasMouth = mouthEdgeDensity > 0.1 && mouthEdgeDensity < 0.4;
-    
-    % Calculate horizontal edge dominance in mouth region (lips)
-    [Gx, Gy] = imgradientxy(mouthRegion);
-    horizontalDominance = sum(abs(Gx(:))) / (sum(abs(Gy(:))) + eps);
-    
-    % Mouths typically have stronger horizontal edges
-    hasMouthShape = horizontalDominance > 1.2;
-    
-    % Combined feature detection
-    if (hasNose && hasMouth) || (hasMouth && hasMouthShape)
-        hasFeatures = true;
-        score = 0.5;
         
-        % Bonus for strong mouth shape
-        if hasMouthShape
-            score = score + 0.2;
-        end
-    elseif hasNose || hasMouth
-        hasFeatures = true;
-        score = 0.4;
+        % Display similarity value for debugging
+        fprintf('Similarity with %s: %.4f\n', personNames{i}, similarities(i));
     end
     
-    score = min(0.8, score);  % Cap score
-end
-
-function gradientScore = calculateGradientCoherence(faceRegion)
-    % Calculate gradient coherence to detect structured patterns in faces
+    % Show similarity distribution
+    subplot(1, 4, 4);
+    bar(similarities);
+    title('Similarity Scores');
+    xlabel('Person Index');
+    ylabel('Similarity');
     
-    % Resize for consistent analysis
-    faceRegion = imresize(faceRegion, [100, 80]);
+    % Wait for user to view debug info
+    fprintf('Press any key to continue...\n');
+    pause;
     
-    % Calculate gradients
-    [Gx, Gy] = imgradientxy(faceRegion);
-    [Gmag, Gdir] = imgradient(Gx, Gy);
-    
-    % Normalize magnitude
-    normGmag = Gmag / max(Gmag(:) + eps);
-    
-    % Calculate gradient coherence using direction consistency
-    % in local neighborhoods
-    coherence = zeros(size(Gdir));
-    windowSize = 5;
-    
-    for i = 1+windowSize:size(Gdir,1)-windowSize
-        for j = 1+windowSize:size(Gdir,2)-windowSize
-            window = Gdir(i-windowSize:i+windowSize, j-windowSize:j+windowSize);
-            magWindow = normGmag(i-windowSize:i+windowSize, j-windowSize:j+windowSize);
-            
-            % Consider only significant gradients
-            strongGradients = magWindow > 0.2;
-            if sum(strongGradients(:)) > 0
-                window = window(strongGradients);
-                
-                % Calculate direction variance
-                dirVariance = circ_var(deg2rad(window(:)));
-                
-                % Lower variance means higher coherence
-                coherence(i,j) = 1 - min(1, dirVariance);
-            end
-        end
+    % Close the debug figure safely
+    if ishandle(debugFig)
+        close(debugFig);
     end
     
-    % Average coherence for significant gradients
-    strongGradients = normGmag > 0.2;
-    if sum(strongGradients(:)) > 0
-        gradientScore = mean(coherence(strongGradients));
+    % Find the best match
+    [bestSimilarity, bestMatch] = max(similarities);
+    
+    % Find top 3 matches for more robust results
+    [sortedSimilarities, sortedIndices] = sort(similarities, 'descend');
+    topMatches = sortedIndices(1:min(3, length(sortedIndices)));
+    topSimilarities = sortedSimilarities(1:min(3, length(sortedIndices)));
+    
+    % Set recognition threshold (LOWER for more matches but less accuracy)
+    recognitionThreshold = 0.3; % Changed from 0.5 to 0.3 to be more lenient
+    
+    % Display result
+    subplot(1, 2, 2);
+    
+    if bestSimilarity > recognitionThreshold
+        % Get the best matching person name
+        matchedPersonName = personNames{bestMatch};
+        confidence = bestSimilarity * 100; % Convert to percentage
+        
+        % Load the matching image from the database (using stored path)
+        try
+            matchedImgOut = imread(dbImgPaths{bestMatch});
+            imshow(matchedImgOut);
+            title(sprintf('Match: %s (%.1f%% confidence)', matchedPersonName, confidence));
+        catch
+            text(0.5, 0.5, 'Match Found (Image not available)', 'FontSize', 18, 'HorizontalAlignment', 'center');
+            axis off;
+            title(sprintf('Match: %s (%.1f%% confidence)', matchedPersonName, confidence));
+        end
+        
+        fprintf('Match found: %s (%.1f%% confidence)\n\n', matchedPersonName, confidence);
+        
+        % Display top 3 matches in console
+        fprintf('Top matches:\n');
+        for i = 1:length(topMatches)
+            fprintf('%d. %s (%.1f%% confidence)\n', i, personNames{topMatches(i)}, topSimilarities(i)*100);
+        end
+        fprintf('\n');
     else
-        gradientScore = 0.3;  % Default score
-    end
-end
-
-function vr = circ_var(alpha)
-    % Simple circular variance calculation for angles
-    % Input angles in radians
-    
-    % Calculate mean resultant length
-    r = sqrt(sum(cos(alpha))^2 + sum(sin(alpha))^2) / numel(alpha);
-    
-    % Circular variance
-    vr = 1 - r;
-end
-
-function edgeDensity = calculateEdgeDensity(faceRegion)
-    % Enhanced edge density calculation with pattern analysis
-    
-    % Resize for consistent analysis
-    faceRegion = imresize(faceRegion, [100, 80]);
-    
-    % Apply Canny edge detection with optimized parameters
-    edges = edge(faceRegion, 'canny', [0.1 0.2]);
-    
-    % Calculate basic edge density
-    basicDensity = sum(edges(:)) / numel(edges);
-    
-    % Divide face into regions to analyze edge distribution
-    % Faces have characteristic edge patterns in different regions
-    upperRegion = edges(1:30, :);
-    middleRegion = edges(31:60, :);
-    lowerRegion = edges(61:end, :);
-    
-    upperDensity = sum(upperRegion(:)) / numel(upperRegion);
-    middleDensity = sum(middleRegion(:)) / numel(middleRegion);
-    lowerDensity = sum(lowerRegion(:)) / numel(lowerRegion);
-    
-    % Calculate density ratios (characteristic for faces)
-    upperMiddleRatio = (upperDensity + 0.001) / (middleDensity + 0.001);
-    lowerMiddleRatio = (lowerDensity + 0.001) / (middleDensity + 0.001);
-    
-    % Score based on typical face edge patterns
-    patternScore = 0;
-    
-    % Eyes and eyebrows typically create more edges in upper region
-    if upperDensity > middleDensity && upperMiddleRatio > 1 && upperMiddleRatio < 2.5
-        patternScore = patternScore + 0.3;
+        text(0.5, 0.5, 'No match found', 'FontSize', 18, 'HorizontalAlignment', 'center');
+        axis off;
+        title('No Match Found');
+        fprintf('No match found in the database.\n\n');
     end
     
-    % Mouth typically creates edges in lower region
-    if lowerDensity > 0.05 && lowerMiddleRatio > 0.8 && lowerMiddleRatio < 2.0
-        patternScore = patternScore + 0.2;
+    % Save the result
+    resultsPath = 'D:\flutter_projects\blue_detector\backend\recognition_results';
+    if ~exist(resultsPath, 'dir')
+        mkdir(resultsPath);
     end
     
-    % Overall density should be in a reasonable range for faces
-    if basicDensity > 0.05 && basicDensity < 0.2
-        patternScore = patternScore + 0.3;
-    end
+    % Generate timestamp for filenames
+    timestamp = datestr(now, 'yyyymmdd_HHMMSS');
     
-    % Normalize pattern score
-    patternScore = min(1.0, patternScore);
+    % Save the comparison figure
+    resultFilename = fullfile(resultsPath, ['comparison_', timestamp, '.jpg']);
+    saveas(resultFig, resultFilename);
+    fprintf('Comparison result saved to: %s\n', resultFilename);
     
-    % Combine basic density with pattern score
-    edgeDensity = 0.4 * (1 - abs(basicDensity - 0.12) / 0.07) + 0.6 * patternScore;
-end
-
-function violaJonesBoxes = detectViolaJones(img)
-    % Try to use Viola-Jones cascade detector if available
-    violaJonesBoxes = [];
+    % Additionally, save individual images
+    testImgFilename = fullfile(resultsPath, ['test_', timestamp, '.jpg']);
+    imwrite(testImgOut, testImgFilename);
+    fprintf('Test image saved to: %s\n', testImgFilename);
     
-    try
-        % Check if Computer Vision Toolbox is available
-        if ~license('test', 'Video_and_Image_Blockset')
-            return;
-        end
+    % Save matched image if available
+    if ~isempty(matchedImgOut)
+        matchedImgFilename = fullfile(resultsPath, ['matched_', timestamp, '_', strrep(matchedPersonName, ' ', '_'), '.jpg']);
+        imwrite(matchedImgOut, matchedImgFilename);
+        fprintf('Matched image saved to: %s\n\n', matchedImgFilename);
         
-        % Create detector object
-        detector = vision.CascadeObjectDetector();
+        % Create a structured result file with all information
+        resultInfoFilename = fullfile(resultsPath, ['result_info_', timestamp, '.txt']);
+        fid = fopen(resultInfoFilename, 'w');
+        fprintf(fid, 'Face Recognition Result\n');
+        fprintf(fid, '=====================\n');
+        fprintf(fid, 'Date & Time: %s\n', datestr(now));
+        fprintf(fid, 'Test Image: %s\n', testImgFilename);
+        fprintf(fid, 'Matched Person: %s\n', matchedPersonName);
+        fprintf(fid, 'Confidence: %.1f%%\n', confidence);
+        fprintf(fid, 'Matched Image: %s\n', matchedImgFilename);
+        fclose(fid);
         
-        % Detect faces
-        violaJonesBoxes = detector(img);
-        
-        % Convert to [x,y,w,h] format if needed
-        if ~isempty(violaJonesBoxes)
-            violaJonesBoxes = violaJonesBoxes(:,1:4);
-        end
-    catch
-        % If any error occurs, return empty
-        violaJonesBoxes = [];
+        fprintf('Detailed result information saved to: %s\n\n', resultInfoFilename);
     end
-end
-
-function combinedBoxes = combineDetections(skinBoxes, violaJonesBoxes)
-    % Combine detections from both methods
-    
-    combinedBoxes = skinBoxes;
-    
-    % If no Viola-Jones detections, just return skin boxes
-    if isempty(violaJonesBoxes)
-        return;
-    end
-    
-    % If no skin detections, just return Viola-Jones boxes
-    if isempty(skinBoxes)
-        combinedBoxes = violaJonesBoxes;
-        return;
-    end
-    
-    % Combine both sets of boxes
-    combinedBoxes = [skinBoxes; violaJonesBoxes];
-    
-    % Apply non-maximum suppression to remove overlapping detections
-    if size(combinedBoxes, 1) > 1
-        combinedBoxes = enhancedNonMaximumSuppression(combinedBoxes);
-    end
-end
-
-function faceBoundingBoxes = tryAdaptiveDetection(img, skinMask)
-    % Fallback detection method using adaptive thresholds
-    
-    faceBoundingBoxes = [];
-    
-    % Try using the largest skin regions
-    stats = regionprops(skinMask, 'BoundingBox', 'Area');
-    if ~isempty(stats)
-        areas = [stats.Area];
-        [~, idx] = sort(areas, 'descend');
-        
-        % Consider top 5 regions with relaxed size constraints
-        for i = 1:min(5, length(idx))
-            bbox = stats(idx(i)).BoundingBox;
-            area = areas(idx(i));
-            
-            % Very lenient size constraints
-            if area > 500 && area < numel(skinMask)*0.9
-                faceBoundingBoxes = [faceBoundingBoxes; bbox];
-            end
-        end
-    end
-    
-    % Apply size-based filtering if we got too many candidates
-    if size(faceBoundingBoxes, 1) > 3
-        % Keep only top 3 largest
-        bboxAreas = faceBoundingBoxes(:,3) .* faceBoundingBoxes(:,4);
-        [~, sortIdx] = sort(bboxAreas, 'descend');
-        faceBoundingBoxes = faceBoundingBoxes(sortIdx(1:3), :);
-    end
-end
-
-function finalBoxes = enhancedNonMaximumSuppression(boxes)
-    % Improved non-maximum suppression with better overlap handling
-    
-    % If less than two boxes, no need for NMS
-    if size(boxes, 1) < 2
-        finalBoxes = boxes;
-        return;
-    end
-    
-    % Convert from [x, y, width, height] to [x1, y1, x2, y2]
-    boxesForNMS = zeros(size(boxes));
-    boxesForNMS(:, 1) = boxes(:, 1);             % x1
-    boxesForNMS(:, 2) = boxes(:, 2);             % y1
-    boxesForNMS(:, 3) = boxes(:, 1) + boxes(:, 3); % x2
-    boxesForNMS(:, 4) = boxes(:, 2) + boxes(:, 4); % y2
-    
-    % Calculate areas
-    areas = (boxesForNMS(:, 3) - boxesForNMS(:, 1) + 1) .* ...
-            (boxesForNMS(:, 4) - boxesForNMS(:, 2) + 1);
-    
-    % Sort boxes by area (largest first)
-    [~, sortedIndices] = sort(areas, 'descend');
-    boxesForNMS = boxesForNMS(sortedIndices, :);
-    
-    % Initialize indices to keep
-    keepIndices = true(size(boxesForNMS, 1), 1);
-    
-    % Enhanced NMS algorithm
-    for i = 1:size(boxesForNMS, 1) - 1
-        if keepIndices(i)
-            % Calculate overlap with remaining boxes
-            xx1 = max(boxesForNMS(i, 1), boxesForNMS(i+1:end, 1));
-            yy1 = max(boxesForNMS(i, 2), boxesForNMS(i+1:end, 2));
-            xx2 = min(boxesForNMS(i, 3), boxesForNMS(i+1:end, 3));
-            yy2 = min(boxesForNMS(i, 4), boxesForNMS(i+1:end, 4));
-            
-            % Intersection area
-            w = max(0, xx2 - xx1 + 1);
-            h = max(0, yy2 - yy1 + 1);
-            intersection = w .* h;
-            
-            % Union area
-            union = areas(i) + areas(i+1:end) - intersection;
-            
-            % IoU
-            iou = intersection ./ union;
-            
-            % Suppress boxes with high overlap
-            overlapping = iou > 0.4;  % More lenient threshold than standard 0.5
-            
-            % Only suppress if the overlapping box is significantly smaller
-            suppress = overlapping & (areas(i+1:end) < areas(i) * 0.8);
-            keepIndices(i+1:end) = keepIndices(i+1:end) & ~suppress;
-        end
-    end
-    
-    % Convert back to original format [x, y, width, height]
-    finalBoxesNMS = boxesForNMS(keepIndices, :);
-    finalBoxes = zeros(size(finalBoxesNMS));
-    finalBoxes(:, 1) = finalBoxesNMS(:, 1);                    % x
-    finalBoxes(:, 2) = finalBoxesNMS(:, 2);                    % y
-    finalBoxes(:, 3) = finalBoxesNMS(:, 3) - finalBoxesNMS(:, 1); % width
-    finalBoxes(:, 4) = finalBoxesNMS(:, 4) - finalBoxesNMS(:, 2); % height
-end
-
-function symmetryScore = calculateSymmetry(faceRegion)
-    % Calculate vertical symmetry score of face region
-    
-    % Resize for consistent analysis
-    faceRegion = imresize(faceRegion, [100, 80]);
-    
-    % Flip left-right for symmetry comparison
-    flippedRegion = fliplr(faceRegion);
-    
-    % Calculate absolute difference
-    diff = abs(double(faceRegion) - double(flippedRegion));
-    
-    % Normalize difference score
-    maxDiff = max(diff(:));
-    if maxDiff > 0
-        diffScore = mean(diff(:)) / maxDiff;
-    else
-        diffScore = 0;
-    end
-    
-    % Symmetry score is inverse of difference
-    symmetryScore = 1 - diffScore;
-    
-    % Apply non-linear mapping to emphasize good symmetry
-    symmetryScore = symmetryScore^2;
-end
-
-function textureScore = calculateTextureVariability(faceRegion)
-    % Calculate texture variability using local binary patterns
-    
-    % Resize for consistent analysis
-    faceRegion = imresize(faceRegion, [100, 80]);
-    
-    % Calculate LBP features
-    lbpFeatures = extractLBPFeatures(faceRegion);
-    
-    % Simple texture score based on LBP variance
-    textureScore = min(1, var(lbpFeatures) * 10);
-end
-
-function lbpFeatures = extractLBPFeatures(region)
-    % Simplified Local Binary Pattern feature extraction
-    
-    % Convert to double
-    region = double(region);
-    
-    % Initialize LBP image
-    lbpImage = zeros(size(region));
-    
-    % Define neighborhood (simplified 3x3)
-    [rows, cols] = size(region);
-    
-    for i = 2:rows-1
-        for j = 2:cols-1
-            center = region(i,j);
-            code = 0;
-            
-            % Compare with 8 neighbors
-            code = code + (region(i-1,j-1) > center) * 1;
-            code = code + (region(i-1,j) > center) * 2;
-            code = code + (region(i-1,j+1) > center) * 4;
-            code = code + (region(i,j+1) > center) * 8;
-            code = code + (region(i+1,j+1) > center) * 16;
-            code = code + (region(i+1,j) > center) * 32;
-            code = code + (region(i+1,j-1) > center) * 64;
-            code = code + (region(i,j-1) > center) * 128;
-            
-            lbpImage(i,j) = code;
-        end
-    end
-    
-    % Calculate histogram (simplified feature)
-    lbpFeatures = histcounts(lbpImage(2:end-1,2:end-1), 0:256);
 end

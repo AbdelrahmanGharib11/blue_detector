@@ -19,7 +19,6 @@ class ImageProvider with ChangeNotifier {
     _originalImage = imageFile;
     _isProcessing = true;
     notifyListeners();
-    print('lets start');
     try {
       _processedImage = await _backendApi.uploadImage(imageFile);
       if (_processedImage != null) {

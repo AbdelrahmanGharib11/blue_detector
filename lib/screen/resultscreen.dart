@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:blue_detector/services/recognizeprovider.dart'
+    as app_reco_provider;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:blue_detector/services/imageprovider.dart'
@@ -10,9 +12,11 @@ class ResultScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var screenHeight = MediaQuery.sizeOf(context).height;
-    // final File imageFile = ModalRoute.of(context)!.settings.arguments as File;
+    int key = ModalRoute.of(context)?.settings.arguments as int;
     final imageProvider =
         Provider.of<app_image_provider.ImageProvider>(context);
+    final recoProvider =
+        Provider.of<app_reco_provider.RecognizeProvider>(context);
     return Scaffold(
       appBar: AppBar(
         elevation: 0,
@@ -58,7 +62,7 @@ class ResultScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Detected Image',
+                  key == 1 ? 'Recognition Result' : 'Detected Image',
                   style: TextStyle(
                     color:
                         const Color.fromARGB(255, 7, 61, 123).withOpacity(0.8),
@@ -75,47 +79,52 @@ class ResultScreen extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: imageProvider.processedImage != null
-                      ? Image.file(
-                          imageProvider.processedImage!,
-                          fit: BoxFit.fill,
-                        )
-                      : const Center(
-                          child: Text('No processed image available')),
+                  child: key == 0
+                      ? imageProvider.processedImage != null
+                          ? Image.file(
+                              imageProvider.processedImage!,
+                              fit: BoxFit.fill,
+                            )
+                          : const Center(
+                              child: Text('No processed image available'))
+                      : recoProvider.recognitionResults != null
+                          ? Image.file(
+                              File(recoProvider.recognitionResults![
+                                  'comparison_image_local_path']),
+                              fit: BoxFit.fill,
+                            )
+                          : const Center(
+                              child: Text('No processed image available')),
                 ),
                 SizedBox(height: screenHeight * 0.05),
-                Text(
-                  'Detected: Face',
-                  style: TextStyle(
-                    color:
-                        const Color.fromARGB(255, 7, 61, 123).withOpacity(0.8),
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.left,
-                ),
-                SizedBox(height: screenHeight * 0.02),
-                Text(
-                  'Eye Color: Brown/Red',
-                  style: TextStyle(
-                    color:
-                        const Color.fromARGB(255, 7, 61, 123).withOpacity(0.8),
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.left,
-                ),
-                SizedBox(height: screenHeight * 0.02),
-                Text(
-                  'Hair Color: Black/Dark',
-                  style: TextStyle(
-                    color:
-                        const Color.fromARGB(255, 7, 61, 123).withOpacity(0.8),
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.left,
-                ),
+                key == 1
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'person: ${recoProvider.recognitionResults!['matched_person']}',
+                            style: TextStyle(
+                              color: const Color.fromARGB(255, 7, 61, 123)
+                                  .withOpacity(0.8),
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.left,
+                          ),
+                          SizedBox(height: screenHeight * 0.04),
+                          Text(
+                            'Matched Confidence: ${recoProvider.recognitionResults!['confidence']}%',
+                            style: TextStyle(
+                              color: const Color.fromARGB(255, 7, 61, 123)
+                                  .withOpacity(0.8),
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.left,
+                          ),
+                        ],
+                      )
+                    : SizedBox()
               ],
             ),
           )
